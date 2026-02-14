@@ -13,22 +13,6 @@ namespace Reader;
 public class FilesReader : IAsyncDisposable
 {
     /// <summary>
-    /// Mask to extract the two most significant bits of a UTF-8 byte
-    /// <br>Decimal: 192</br>
-    /// <br>Hexadecimal: 0xC0</br>
-    /// <br>Binary: 11000000 (checks if byte pattern is 10xxxxxx)</br>
-    /// </summary>
-    private const byte Utf8ContinuationMask = 0xC0;
-
-    /// <summary>
-    /// Pattern indicating a UTF-8 continuation byte (10xxxxxx)
-    /// <br>Decimal: 128</br>
-    /// <br>Hexadecimal: 0x80</br>
-    /// <br>Binary: 10000000 (byte starts with 10)</br>
-    /// </summary>
-    private const byte Utf8ContinuationByteFlag = 0x80;
-
-    /// <summary>
     /// Pattern indicating a newline character (line feed, LF)
     /// <br>Decimal: 10</br>
     /// <br>Hexadecimal: 0x0A</br>
@@ -142,21 +126,9 @@ public class FilesReader : IAsyncDisposable
 
         long positions = positionBytes;
 
-        // Scan backwards to find the start of a UTF-8 character by skipping continuation bytes (10xxxxxx pattern)
-        // Stop when we encounter a byte that is not a continuation byte, indicating the start of a character
-        while (positions > 0)
-        {
-            byte b = accessor.ReadByte(positions);
-            if ((b & Utf8ContinuationMask) != Utf8ContinuationByteFlag)
-            {
-                break;
-            }
-            positions--;
-        }
-
         // Scan backwards from the safe position to find the last newline character (0x0A)
         // Return the position immediately after the newline to mark the start of the current line
-        while (positions > 0)
+        while (positions >= 0)
         {
             byte b = accessor.ReadByte(positions);
             if (b == NewLineCharacter)
@@ -205,6 +177,12 @@ public class FilesReader : IAsyncDisposable
             }
 
         }
+
+        if (bytes.Count > 0 && bytes[^1] == '\r')
+        {
+            bytes.RemoveAt(bytes.Count - 1);
+        }
+
         return (Encoding.UTF8.GetString(bytes.ToArray()), positions);
     }
 
