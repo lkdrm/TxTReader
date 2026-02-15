@@ -137,7 +137,6 @@ public class FilesReader : IAsyncDisposable
             }
             positions--;
         }
-
         return 0;
     }
 
@@ -164,6 +163,7 @@ public class FilesReader : IAsyncDisposable
             {
                 break;
             }
+
             if (b == NullCharacter)
             {
                 continue;
@@ -175,14 +175,12 @@ public class FilesReader : IAsyncDisposable
             {
                 break;
             }
-
         }
 
         if (bytes.Count > 0 && bytes[^1] == '\r')
         {
             bytes.RemoveAt(bytes.Count - 1);
         }
-
         return (Encoding.UTF8.GetString(bytes.ToArray()), positions);
     }
 
