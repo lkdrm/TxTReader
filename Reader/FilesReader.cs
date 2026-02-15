@@ -141,6 +141,121 @@ public class FilesReader : IAsyncDisposable
     }
 
     /// <summary>
+    /// Asynchronously searches for the first occurrence of a specified byte pattern, encoded as a UTF-8 string, within
+    /// the file, starting from a given offset.
+    /// </summary>
+    /// <remarks>The method reads the file in 1 MB chunks and searches for the pattern in each chunk. If the
+    /// pattern spans across chunk boundaries, the method ensures it is still detected. If the object has been disposed,
+    /// an ObjectDisposedException is thrown.</remarks>
+    /// <param name="pattern">The string pattern to search for. The pattern is encoded using UTF-8 before searching.</param>
+    /// <param name="startOffSet">The zero-based byte offset in the file at which to begin the search. Must be non-negative and less than the
+    /// length of the file.</param>
+    /// <returns>A zero-based index representing the position of the first occurrence of the pattern within the file; returns -1
+    /// if the pattern is not found.</returns>
+    public async Task<long> SearchPatternAsync(string pattern, long startOffSet = 0)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        byte[] patternBytes = Encoding.UTF8.GetBytes(pattern);
+        int overlap = patternBytes.Length - 1;
+        int bufferSize = 1024 * 1024;
+        long currentPostition = startOffSet;
+
+        while (currentPostition < _fileLength)
+        {
+            byte[] buffer = await ReadBytesAsync(currentPostition, bufferSize);
+            ReadOnlySpan<byte> searchBytes = buffer.AsSpan();
+
+            int localIndex = searchBytes.IndexOf(patternBytes);
+
+            if (localIndex != -1)
+            {
+                return currentPostition + localIndex;
+            }
+
+            if (buffer.Length < bufferSize)
+            {
+                break;
+            }
+            currentPostition += (buffer.Length - overlap);
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Asynchronously searches for the last occurrence of a specified string pattern in the file, scanning backwards
+    /// from a given offset.
+    /// </summary>
+    /// <remarks>The method reads the file in 1 MB chunks and searches each chunk for the specified pattern,
+    /// moving backwards through the file until the pattern is found or the beginning of the file is reached. The search
+    /// is performed using UTF-8 encoding for the pattern.</remarks>
+    /// <param name="pattern">The string pattern to search for within the file. This value cannot be null or empty.</param>
+    /// <param name="startOffSet">The position in the file, in bytes, from which to start the search. Specify -1 to begin searching from the end
+    /// of the file.</param>
+    /// <returns>A zero-based index representing the position of the last occurrence of the pattern within the file; returns -1
+    /// if the pattern is not found.</returns>
+    public async Task<long> SearchPatternBackwardsAsync(string pattern, long startOffSet)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        byte[] patternBytes = Encoding.UTF8.GetBytes(pattern);
+        int overlap = patternBytes.Length - 1;
+        int bufferSize = 1024 * 1024;
+        long currentEndPosition = (startOffSet == -1) ? _fileLength : startOffSet;
+
+        while (currentEndPosition > 0)
+        {
+            long readStartPosition = Math.Max(0, currentEndPosition - bufferSize);
+            int bytesToRead = (int)(currentEndPosition - readStartPosition);
+
+            byte[] buffer = await ReadBytesAsync(readStartPosition, bytesToRead);
+            ReadOnlySpan<byte> searchBytes = buffer.AsSpan();
+
+            int localIndex = searchBytes.LastIndexOf(patternBytes);
+
+            if (localIndex != -1)
+            {
+                return readStartPosition + localIndex;
+            }
+
+            if (readStartPosition == 0)
+            {
+                break;
+            }
+
+            currentEndPosition = readStartPosition + overlap;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Asynchronously reads a specified number of bytes from the memory-mapped file starting at the given position.
+    /// </summary>
+    /// <remarks>If the requested buffer size exceeds the remaining length of the file, only the available
+    /// bytes are read. This method uses a memory-mapped file accessor to perform the read operation
+    /// asynchronously.</remarks>
+    /// <param name="currentPostition">The zero-based position in the file at which to begin reading. Must be less than the total length of the file.</param>
+    /// <param name="bufferSize">The maximum number of bytes to read from the file. Must be a positive integer.</param>
+    /// <returns>A byte array containing the bytes read from the file. The length of the array may be less than the specified
+    /// buffer size if fewer bytes are available.</returns>
+    private async Task<byte[]> ReadBytesAsync(long currentPostition, int bufferSize) =>
+        await Task.Run(() =>
+        {
+            // Ensure bufferSize doesn't exceed remaining file length
+            int actualBufferSize = (int)Math.Min(bufferSize, _fileLength - currentPostition);
+
+            using var accessor = _memoryMappedFile!.CreateViewAccessor(currentPostition, actualBufferSize, MemoryMappedFileAccess.Read);
+            byte[] buffer = new byte[actualBufferSize];
+            int read = accessor.ReadArray(0, buffer, 0, actualBufferSize);
+
+            if (read < actualBufferSize)
+            {
+                Array.Resize(ref buffer, read);
+            }
+            return buffer;
+        });
+
+    /// <summary>
     /// Reads a line of text from a memory-mapped file, starting at the specified position.
     /// </summary>
     /// <remarks>Reading stops when a newline character (NewLineCharacter) is encountered, a null byte (NullCharacter) is skipped,
