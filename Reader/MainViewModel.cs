@@ -74,7 +74,7 @@ public class MainViewModel : INotifyPropertyChanged
             {
                 _scrollPosition = value;
                 OnPropertyChanged();
-                LoadLinesAsync();
+                _ = LoadLinesAsync();
             }
         }
     }
@@ -131,6 +131,8 @@ public class MainViewModel : INotifyPropertyChanged
             MaxScroll = _filesReader.FileLength;
             ScrollPosition = 0;
             WindowTitle = $"Reader - {Path.GetFileName(path)}";
+
+            await LoadLinesAsync();
         }
         catch (Exception ex)
         {
@@ -165,8 +167,8 @@ public class MainViewModel : INotifyPropertyChanged
 
         try
         {
-            await Task.Delay(15, token);
-            var lines = await _filesReader.ReadAllLinesAsync(_scrollPosition, 50);
+            await Task.Delay(5, token);
+            var lines = await _filesReader.ReadAllLinesAsync(_scrollPosition, 60);
 
             if (!token.IsCancellationRequested)
             {
