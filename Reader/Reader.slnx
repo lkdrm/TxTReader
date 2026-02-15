@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="../Reader.Tests/Reader.Tests.csproj" Id="8f07992b-7a61-4410-9f25-0a7a56609c4f" />
   <Project Path="Reader.csproj" />
 </Solution>
