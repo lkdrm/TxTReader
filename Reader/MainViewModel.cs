@@ -60,6 +60,20 @@ public class MainViewModel : INotifyPropertyChanged
     private string _windowTitle = "Reader";
 
     /// <summary>
+    /// Stores the index of the last item found during a search operation.
+    /// </summary>
+    /// <remarks>A value of -1 indicates that no item has been found yet. This field is typically used to
+    /// optimize repeated search operations by tracking the position of the last successful search.</remarks>
+    private long _lastFoundIndex = -1;
+
+    /// <summary>
+    /// Stores the most recent search pattern entered by the user.
+    /// </summary>
+    /// <remarks>This field is initialized to an empty string and is updated whenever a new search is
+    /// performed. It is used internally to retain the last search criteria for subsequent operations.</remarks>
+    private string _lastSearchPattern = string.Empty;
+
+    /// <summary>
     /// Gets or sets the current scroll position within the content.
     /// </summary>
     /// <remarks>Setting this property raises a property change notification and initiates an asynchronous
@@ -185,6 +199,71 @@ public class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             Debug.WriteLine($"Error during the reading: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Asynchronously searches for the specified text pattern in the currently opened file.
+    /// </summary>
+    /// <remarks>If no file is currently opened, the method displays a message to the user and does not
+    /// perform a search. If the pattern is found, the scroll position is updated to the location of the found pattern;
+    /// otherwise, a message indicates that the pattern was not found.</remarks>
+    /// <param name="pattern">The string pattern to search for within the file. This parameter cannot be null or empty.</param>
+    /// <returns>A task that represents the asynchronous search operation.</returns>
+    public async Task SearchAsync(string pattern, bool searchForward = true)
+    {
+        if (_filesReader == null)
+        {
+            MessageBox.Show("No file is opened.");
+            return;
+        }
+
+        long startPosition = 0;
+
+        if (searchForward)
+        {
+            if (pattern == _lastSearchPattern && _lastFoundIndex != -1)
+            {
+                startPosition = _lastFoundIndex + 1;
+            }
+            else
+            {
+                startPosition = 0;
+            }
+        }
+        else
+        {
+            if (pattern == _lastSearchPattern && _lastFoundIndex != -1)
+            {
+                startPosition = _lastFoundIndex;
+            }
+            else
+            {
+                startPosition = _filesReader.FileLength;
+            }
+        }
+
+        _lastSearchPattern = pattern;
+
+        long foundIndex;
+        if (searchForward)
+        {
+            foundIndex = await _filesReader.SearchPatternAsync(pattern, startPosition);
+        }
+        else
+        {
+            foundIndex = await _filesReader.SearchPatternBackwardsAsync(pattern, startPosition);
+        }
+
+        if (foundIndex != -1)
+        {
+            ScrollPosition = foundIndex;
+            _lastFoundIndex = foundIndex;
+        }
+        else
+        {
+            MessageBox.Show($"Text '{pattern}' not found.");
+            _lastFoundIndex = -1;
         }
     }
 
