@@ -54,7 +54,7 @@
 
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <TextBlock Text="{Binding}" Foreground="Black" FontFamily="Consolas" FontSize="14" 
+                        <TextBox Text="{Binding Mode=OneWay}" IsReadOnly="True" BorderThickness="0" Background="Transparent" Foreground="Black" FontFamily="Consolas" FontSize="14" 
                                   TextWrapping="Wrap" Margin="0,2"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
