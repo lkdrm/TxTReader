@@ -1,5 +1,8 @@
 ﻿using Microsoft.Win32;
+using System.IO;
+using System.Net.Http;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 
 namespace Reader;
@@ -9,6 +12,14 @@ namespace Reader;
 /// </summary>
 public partial class MainWindow : Window
 {
+    /// <summary>
+    /// Provides a static instance of HttpClient for making HTTP requests.
+    /// </summary>
+    /// <remarks>This instance is intended to be reused throughout the application to take advantage of
+    /// connection pooling and reduce resource consumption. It is recommended to use a single instance of HttpClient for
+    /// the lifetime of the application to avoid socket exhaustion issues.</remarks>
+    private static readonly HttpClient _httpClient = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -129,6 +140,57 @@ public partial class MainWindow : Window
         if (viewModel != null)
         {
             await viewModel.SearchAsync(textToFind);
+        }
+    }
+
+    /// <summary>
+    /// Handles the click event for the download button, initiating an asynchronous download of a file from the URL
+    /// specified in the input box.
+    /// </summary>
+    /// <remarks>If the URL input is empty or invalid, the user is prompted to enter a valid link. The method
+    /// disables the button during the download process and restores its state upon completion or error. Any exceptions
+    /// encountered during the download are caught and displayed to the user.</remarks>
+    /// <param name="sender">The source of the event, typically the button that was clicked to start the download operation.</param>
+    /// <param name="e">The event data associated with the button click, containing information relevant to the routed event.</param>
+    private async void DownloadUrl_Click(object sender, RoutedEventArgs e)
+    {
+        string url = UrlBox.Text;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            MessageBox.Show("Enter please valid link");
+            return;
+        }
+
+        try
+        {
+            var button = sender as Button;
+            string originalText = button.Content.ToString();
+            button.Content = "Loading...";
+            button.IsEnabled = false;
+
+            string tempFilePath = Path.GetTempFileName();
+
+            using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+            {
+                using var streamToReadFrom = await response.Content.ReadAsStreamAsync();
+                using var streamToWrite = File.Open(tempFilePath, FileMode.Create);
+                await streamToReadFrom.CopyToAsync(streamToWrite);
+            }
+            var viewModel = this.DataContext as MainViewModel;
+            if (viewModel != null)
+            {
+                await viewModel.OpenFilesAsync(tempFilePath);
+            }
+
+            button.Content = originalText;
+            button.IsEnabled = true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error during the downloading: {ex.Message}");
+            (sender as Button).Content = "Download";
+            (sender as Button).IsEnabled = true;
         }
     }
 
