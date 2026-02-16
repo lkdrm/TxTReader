@@ -17,7 +17,7 @@
         </Grid.RowDefinitions>
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5" Background="#F0F0F0">
 
-            <Button Click="OpenFile_click" Margin="10" HorizontalAlignment="Left" Style="{StaticResource ButtonStyle}">
+            <Button Click="OpenFile_click" Style="{StaticResource ButtonStyle}" Margin="10" HorizontalAlignment="Left">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Open File" VerticalAlignment="Center" Margin="5" FontSize="14"/>
                 </StackPanel>
@@ -25,10 +25,16 @@
 
             <Rectangle Width="1" Fill="Gray" Margin="10,2"/>
             <TextBlock Text="Search:" VerticalAlignment="Center" Margin="5,0" FontSize="14" FontWeight="SemiBold"/>
-            <TextBox x:Name="SearchBox" KeyDown="SearchBox_KeyDown" Width="250" VerticalAlignment="Center" Padding="8,6" 
+            <TextBox x:Name="SearchBox" KeyDown="SearchBox_KeyDown" Width="250" Height="32" VerticalAlignment="Center" Padding="8,6" 
                      FontSize="14" BorderBrush="#0078D4" BorderThickness="2" Margin="5,0"/>
 
-            <Button Content="Find" Click="SearchButton_Click" Margin="5" FontSize="14" Style="{StaticResource ButtonStyle}" Width="51" Height="32"/>
+            <Button Content="Find" Click="SearchButton_Click" Style="{StaticResource ButtonStyle}" Margin="5" FontSize="14"  Width="51" Height="32"/>
+
+            <Rectangle Width="1" Fill="Gray" Margin="10,2"/>
+            <TextBlock Text="URL:" VerticalAlignment="Center" Margin="5,0"/>
+            <TextBox x:Name="UrlBox" Width="200" Height="32" FontSize="14" VerticalAlignment="Center" Padding="2"/>
+
+            <Button Content="Download" Click="DownloadUrl_Click" Style="{StaticResource ButtonStyle}" Padding="10,5" Margin="5,0" FontSize="14" Width="75" Height="32"/>
         </StackPanel>
         
         <Grid Grid.Row="1" PreviewMouseWheel="ContentGrid_PreviewMouseWheel">
@@ -50,7 +56,7 @@
                       Orientation="Vertical" Minimum="0" Maximum="{Binding MaxScroll}" Grid.ColumnSpan="2" Margin="13,0,10,0"
                       Value="{Binding ScrollPosition, Mode=TwoWay}" SmallChange="50" LargeChange="5000" ViewportSize="1000"/>
 
-            <ItemsControl Grid.Column="1" Grid.Row="1" ItemsSource="{Binding VisibleLines}" Background="#1E1E1E">
+            <ItemsControl Grid.Column="1" Grid.Row="1" ItemsSource="{Binding VisibleLines}" Background="#1E1E1E" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
 
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -62,7 +68,7 @@
                 <ItemsControl.Template>
                     <ControlTemplate TargetType="ItemsControl">
                         <ScrollViewer VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled" 
-                                     CanContentScroll="False" PanningMode="None" Focusable="False">
+                                     CanContentScroll="True" PanningMode="None" Focusable="False">
                             <ItemsPresenter/>
                         </ScrollViewer>
                     </ControlTemplate>
