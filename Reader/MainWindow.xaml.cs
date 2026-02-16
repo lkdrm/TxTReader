@@ -12,7 +12,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        
+
         PreviewKeyDown += MainWindow_PreviewKeyDown;
     }
 
@@ -46,6 +46,43 @@ public partial class MainWindow : Window
                 _ = viewModel.SearchAsync(textToFind, !isShiftPressed);
                 e.Handled = true;
             }
+        }
+        else if (e.Key == Key.PageUp || e.Key == Key.PageDown)
+        {
+            var viewModel = this.DataContext as MainViewModel;
+            if (viewModel == null)
+            {
+                return;
+            }
+
+            long offset = 50;
+
+            if (e.Key is Key.PageUp)
+            {
+                viewModel.ScrollPosition = Math.Max(0, viewModel.ScrollPosition - offset);
+            }
+            else
+            {
+                viewModel.ScrollPosition = Math.Min(viewModel.MaxScroll, viewModel.ScrollPosition + offset);
+            }
+            e.Handled = true;
+        }
+        else if (e.Key == Key.End || e.Key == Key.Home)
+        {
+            var viewModel = this.DataContext as MainViewModel;
+            if (viewModel == null)
+            {
+                return;
+            }
+            if (e.Key is Key.End)
+            {
+                viewModel.ScrollPosition = viewModel.MaxScroll;
+            }
+            else
+            {
+                viewModel.ScrollPosition = 0;
+            }
+            e.Handled = true;
         }
     }
 
@@ -89,7 +126,7 @@ public partial class MainWindow : Window
 
         var viewModel = this.DataContext as MainViewModel;
 
-        if (viewModel != null) 
+        if (viewModel != null)
         {
             await viewModel.SearchAsync(textToFind);
         }
