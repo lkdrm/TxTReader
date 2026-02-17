@@ -31,7 +31,7 @@
             <Button Content="Find" Click="SearchButton_Click" Style="{StaticResource ButtonStyle}" Width="50"/>
 
             <Rectangle Width="1" Fill="Gray" Margin="10,2"/>
-            <TextBlock Text="URL:" VerticalAlignment="Center" Margin="5,0"/>
+            <TextBlock Text="URL:" VerticalAlignment="Center" Margin="5,0" FontWeight="SemiBold"/>
             <TextBox x:Name="UrlBox" Width="200" Height="32" FontSize="14" VerticalAlignment="Center" Padding="2"/>
 
             <Button Content="Download" Click="DownloadUrl_Click" Style="{StaticResource ButtonStyle}" Width="80"/>
@@ -39,6 +39,8 @@
             <Rectangle Width="1" Fill="Gray" Margin="10,2"/>
             <Button Content="Random" Click="GenerateRandom_click" Style="{StaticResource ButtonStyle}" Width="70"/>
 
+            <Rectangle Width="1" Fill="Gray" Margin="10,2"/>
+            <Button Content="Save" Click="Save_click" Style="{StaticResource ButtonStyle}" Width="50"/>
         </StackPanel>
         
         <Grid Grid.Row="1" PreviewMouseWheel="ContentGrid_PreviewMouseWheel">
