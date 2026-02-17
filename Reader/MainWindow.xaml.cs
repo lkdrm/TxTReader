@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System.IO;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -261,6 +262,47 @@ public partial class MainWindow : Window
         {
             button.IsEnabled = true;
             button.Content = "Random";
+        }
+    }
+
+    /// <summary>
+    /// Handles the click event for the Save button and prompts the user to select a location to save the current
+    /// document as a text file.
+    /// </summary>
+    /// <remarks>If the current file path is not set in the data context, an error message is displayed and
+    /// the save operation is not performed. The method uses a SaveFileDialog to allow the user to specify the file name
+    /// and location. If the save operation fails, an error message is shown to the user.</remarks>
+    /// <param name="sender">The source of the event, typically the Save button that was clicked.</param>
+    /// <param name="e">The event data associated with the click event.</param>
+    private async void Save_click(object sender, RoutedEventArgs e)
+    {
+        var viewModel = this.DataContext as MainViewModel;
+
+        if (viewModel == null || string.IsNullOrEmpty(viewModel.CurrentFilePath))
+        {
+            MessageBox.Show("Mistake was happens during the saving");
+            return;
+        }
+
+        var saveDialog = new SaveFileDialog
+        {
+            FileName = "BigText",
+            DefaultExt = ".txt",
+            Filter = "Text documents (.txt)|*.txt|All files (*.*)|*.*",
+            InitialDirectory = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location)
+        };
+
+        if (saveDialog.ShowDialog() == true)
+        {
+            try
+            {
+                File.Copy(viewModel.CurrentFilePath, saveDialog.FileName, true);
+                MessageBox.Show("File has been saved");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Can`t save a file: {ex.Message}");
+            }
         }
     }
 

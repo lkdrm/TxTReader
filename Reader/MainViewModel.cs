@@ -74,6 +74,30 @@ public class MainViewModel : INotifyPropertyChanged
     private string _lastSearchPattern = string.Empty;
 
     /// <summary>
+    /// Stores the path to the currently opened file.
+    /// </summary>
+    /// <remarks>This field is initialized when a file is successfully opened and is updated through the
+    /// CurrentFilePath property. It is used to track which file is currently being displayed and read by the
+    /// application.</remarks>
+    private string _currentFilePath;
+
+    /// <summary>
+    /// Gets or sets the path to the currently opened file.
+    /// </summary>
+    /// <remarks>Setting this property raises a property change notification, allowing data-bound UI elements
+    /// to update the displayed file path automatically. This property reflects the file that is currently being
+    /// read and displayed by the file reader.</remarks>
+    public string CurrentFilePath
+    {
+        get => _currentFilePath;
+        set
+        {
+            _currentFilePath = value;
+            OnPropertyChanged(nameof(CurrentFilePath));
+        }
+    }
+
+    /// <summary>
     /// Gets or sets the current scroll position within the content.
     /// </summary>
     /// <remarks>Setting this property raises a property change notification and initiates an asynchronous
@@ -141,7 +165,7 @@ public class MainViewModel : INotifyPropertyChanged
             }
 
             _filesReader = new FilesReader(path);
-
+            _currentFilePath = path;
             MaxScroll = _filesReader.FileLength;
             ScrollPosition = 0;
             WindowTitle = $"Reader - {Path.GetFileName(path)}";
