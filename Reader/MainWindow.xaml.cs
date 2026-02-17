@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System.IO;
 using System.Net.Http;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -191,6 +192,75 @@ public partial class MainWindow : Window
             MessageBox.Show($"Error during the downloading: {ex.Message}");
             (sender as Button).Content = "Download";
             (sender as Button).IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Handles the click event to generate a large file containing random text and opens it in the application.
+    /// </summary>
+    /// <remarks>This method generates a temporary file with a fixed number of lines, each containing randomly
+    /// selected words from a predefined list. The button is disabled during the operation to prevent multiple
+    /// invocations and re-enabled upon completion. Any errors encountered during the process are displayed to the
+    /// user.</remarks>
+    /// <param name="sender">The source of the event, typically the button that was clicked.</param>
+    /// <param name="e">The event data associated with the click event.</param>
+    private async void GenerateRandom_click(object sender, RoutedEventArgs e)
+    {
+        var button = sender as Button;
+        button.IsEnabled = false;
+        button.Content = "Generating";
+
+        Random rnd = new();
+
+        string[] words = { "lorem", "ipsum", "dolor", "sit", "amet", "consectetur",
+                       "adipiscing", "elit", "sed", "do", "eiusmod", "tempor",
+                       "incididunt", "ut", "labore", "et", "dolore", "magna",
+                       "aliqua", "ut", "enim", "ad", "minim", "veniam", "quis",
+                       "nostrud", "exercitation", "ullamco", "laboris", "nisi",
+                       "ut", "aliquip", "ex", "ea", "commodo", "consequat" };
+
+        try
+        {
+            string tempFilePath = Path.GetTempFileName();
+            int linesCount = 500000;
+
+            await Task.Run(() =>
+            {
+                using var writer = new StreamWriter(tempFilePath);
+                {
+                    var sb = new StringBuilder();
+
+                    for (int i = 0; i < linesCount; i++)
+                    {
+                        sb.Clear();
+                        sb.Append($"Row {i + 1}:");
+                        int wordsInLine = rnd.Next(5, 20);
+
+                        for (int j = 0; j < wordsInLine; j++)
+                        {
+                            string word = words[rnd.Next(words.Length)];
+                            sb.Append(word).Append(' ');
+                        }
+
+                        writer.WriteLine(sb.ToString());
+                    }
+                }
+            });
+
+            var viewModel = this.DataContext as MainViewModel;
+            if (viewModel != null)
+            {
+                await viewModel.OpenFilesAsync(tempFilePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error during text generation: {ex}");
+        }
+        finally
+        {
+            button.IsEnabled = true;
+            button.Content = "Random";
         }
     }
 
