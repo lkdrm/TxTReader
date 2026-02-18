@@ -28,6 +28,9 @@
             <TextBox x:Name="SearchBox" KeyDown="SearchBox_KeyDown" Width="250" Height="32" VerticalAlignment="Center" Padding="8,6" 
                      FontSize="14" BorderBrush="#0078D4" BorderThickness="2" Margin="5,0"/>
 
+            <CheckBox x:Name="FilterCheckBox" Content="Filtering" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" 
+                      Margin="5,0" Checked="FilterCheckerBox_Checked" Unchecked="FilterCheckerBox_Unchecked"/>
+
             <Button Content="Find" Click="SearchButton_Click" Style="{StaticResource ButtonStyle}" Width="50"/>
 
             <Rectangle Width="1" Fill="Gray" Margin="10,2"/>

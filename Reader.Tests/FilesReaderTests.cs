@@ -459,7 +459,7 @@ public class FilesReaderTests : IDisposable
     {
         // Arrange
         var filePath = TrackGeneratedFile(
-            TestFixtures.GenerateLargeFile(1000, _testFilesDirectory));
+            await TestFixtures.GenerateLargeFileAsync(1000, _testFilesDirectory));
 
         await using var reader = new FilesReader(filePath);
 
@@ -477,7 +477,7 @@ public class FilesReaderTests : IDisposable
     {
         // Arrange
         var filePath = TrackGeneratedFile(
-            TestFixtures.GenerateLargeFile(1000, _testFilesDirectory));
+            await TestFixtures.GenerateLargeFileAsync(1000, _testFilesDirectory));
 
         await using var reader = new FilesReader(filePath);
 
@@ -498,7 +498,7 @@ public class FilesReaderTests : IDisposable
     {
         // Arrange
         var filePath = TrackGeneratedFile(
-            TestFixtures.GenerateLargeFile(totalLines, _testFilesDirectory));
+            await TestFixtures.GenerateLargeFileAsync(totalLines, _testFilesDirectory));
 
         await using var reader = new FilesReader(filePath);
 
@@ -666,7 +666,7 @@ public class FilesReaderTests : IDisposable
     {
         // Arrange
         var filePath = TrackGeneratedFile(
-            TestFixtures.GenerateLargeFile(100, _testFilesDirectory));
+            await TestFixtures.GenerateLargeFileAsync(100, _testFilesDirectory));
 
         await using var reader = new FilesReader(filePath);
 
@@ -692,7 +692,7 @@ public class FilesReaderTests : IDisposable
     {
         // Arrange
         var filePath = TrackGeneratedFile(
-            TestFixtures.GenerateLargeFile(100, _testFilesDirectory));
+            await TestFixtures.GenerateLargeFileAsync(100, _testFilesDirectory));
 
         await using var reader = new FilesReader(filePath);
 
@@ -716,7 +716,7 @@ public class FilesReaderTests : IDisposable
     {
         // Arrange
         var filePath = TrackGeneratedFile(
-            TestFixtures.GenerateLargeFile(10000, _testFilesDirectory));
+            await TestFixtures.GenerateLargeFileAsync(10000, _testFilesDirectory));
 
         await using var reader = new FilesReader(filePath);
 
@@ -736,7 +736,7 @@ public class FilesReaderTests : IDisposable
     {
         // Arrange
         var filePath = TrackGeneratedFile(
-            TestFixtures.GenerateLargeFile(100, _testFilesDirectory));
+            await TestFixtures.GenerateLargeFileAsync(100, _testFilesDirectory));
 
         await using var reader = new FilesReader(filePath);
 

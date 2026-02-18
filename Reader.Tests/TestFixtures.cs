@@ -51,7 +51,7 @@ public static class TestFixtures
     /// <summary>
     /// Generates a large file with specified number of lines.
     /// </summary>
-    public static string GenerateLargeFile(int lineCount, string? tempDir = null)
+    public static async Task<string> GenerateLargeFileAsync(int lineCount, string? tempDir = null)
     {
         tempDir ??= Path.GetTempPath();
         var fileName = $"large-{lineCount}-{Guid.NewGuid()}.txt";
@@ -62,7 +62,7 @@ public static class TestFixtures
         using var writer = new StreamWriter(filePath, false, encoding);
         for (int i = 0; i < lineCount; i++)
         {
-            writer.WriteLine($"Line {i}");
+            await writer.WriteLineAsync($"Line {i}");
         }
 
         return filePath;
