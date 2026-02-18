@@ -22,6 +22,12 @@ public partial class MainWindow : Window
     /// the lifetime of the application to avoid socket exhaustion issues.</remarks>
     private static readonly HttpClient _httpClient = new();
 
+    /// <summary>
+    /// Stores the file path of the currently open file before filtering is applied.
+    /// Used to restore the original file when the filter checkbox is unchecked.
+    /// </summary>
+    private string _readFilePath;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -225,7 +231,7 @@ public partial class MainWindow : Window
             string tempFilePath = Path.GetTempFileName();
             int linesCount = 500000;
 
-            await Task.Run(() =>
+            await Task.Run(async () =>
             {
                 using var writer = new StreamWriter(tempFilePath);
                 {
@@ -243,7 +249,7 @@ public partial class MainWindow : Window
                             sb.Append(word).Append(' ');
                         }
 
-                        writer.WriteLine(sb.ToString());
+                        await writer.WriteLineAsync(sb.ToString());
                     }
                 }
             });
@@ -303,6 +309,72 @@ public partial class MainWindow : Window
             {
                 MessageBox.Show($"Can`t save a file: {ex.Message}");
             }
+        }
+    }
+
+    /// <summary>
+    /// Handles the Checked event for the filter checkbox, filtering lines in the current file based on the search text
+    /// and displaying the filtered results.
+    /// </summary>
+    /// <remarks>If the current file path is not set or the search text is empty, no filtering is performed.
+    /// The method creates a temporary file containing only the lines that match the search text and opens it for
+    /// viewing. This operation is performed asynchronously to avoid blocking the UI thread.</remarks>
+    /// <param name="sender">The source of the event, typically the filter checkbox that was checked.</param>
+    /// <param name="e">The event data associated with the Checked event.</param>
+    private async void FilterCheckerBox_Checked(object sender, RoutedEventArgs e)
+    {
+        var viewModel = (MainViewModel)this.DataContext;
+
+        if (viewModel == null || string.IsNullOrEmpty(viewModel.CurrentFilePath))
+        {
+            return;
+        }
+
+        _readFilePath = viewModel.CurrentFilePath;
+
+        string searchText = SearchBox.Text;
+        if (string.IsNullOrEmpty(searchText))
+        {
+            FilterCheckBox.IsChecked = false;
+            return;
+        }
+
+        string tempFilePath = Path.GetTempFileName();
+
+        await Task.Run(async () =>
+        {
+            using var streamReader = new StreamReader(_readFilePath);
+            using var writer = new StreamWriter(tempFilePath);
+            {
+                string line;
+                while ((line = await streamReader.ReadLineAsync()) != null)
+                {
+                    if (line.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                    {
+                        await writer.WriteLineAsync(line);
+                    }
+                }
+            }
+        });
+        await viewModel.OpenFilesAsync(tempFilePath);
+    }
+
+    /// <summary>
+    /// Handles the Unchecked event of a filter checkbox and initiates asynchronous file opening if a valid file path is
+    /// specified.
+    /// </summary>
+    /// <remarks>This method requires that the data context is set to a MainViewModel instance and that a
+    /// non-empty file path is available. It triggers file opening logic when the filter checkbox is
+    /// unchecked.</remarks>
+    /// <param name="sender">The source of the event, typically the checkbox that was unchecked.</param>
+    /// <param name="e">The event data associated with the Unchecked event.</param>
+    private async void FilterCheckerBox_Unchecked(object sender, RoutedEventArgs e)
+    {
+        var viewModel = (MainViewModel)this.DataContext;
+
+        if(viewModel != null && !string.IsNullOrEmpty(_readFilePath))
+        {
+            viewModel.OpenFilesAsync(_readFilePath);
         }
     }
 
