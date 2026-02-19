@@ -27,9 +27,12 @@ public class MainViewModel : INotifyPropertyChanged
     /// <summary>
     /// Holds the cancellation token source used to signal cancellation requests for asynchronous operations.
     /// </summary>
-    /// <remarks>Set this field to null if cancellation is not required. This field is typically used to
-    /// manage the lifetime of asynchronous tasks and to allow cooperative cancellation.</remarks>
     private CancellationTokenSource? _cancellationTokenSource;
+
+    /// <summary>
+    /// Holds the cancellation token source for search operations.
+    /// </summary>
+    private CancellationTokenSource? _searchCancellationTokenSource;
 
     /// <summary>
     /// Gets the collection of lines currently visible to the user in the interface.
@@ -51,6 +54,11 @@ public class MainViewModel : INotifyPropertyChanged
     /// Stores the maximum scroll value allowed for the control.
     /// </summary>
     private long _maxScroll;
+
+    /// <summary>
+    /// The normalized maximum value used for ScrollBar binding to avoid double precision loss with large files.
+    /// </summary>
+    private const double NormalizedMaximum = 10000000.0;
 
     /// <summary>
     /// Gets or sets the title of the window displayed to the user.
@@ -80,6 +88,11 @@ public class MainViewModel : INotifyPropertyChanged
     /// CurrentFilePath property. It is used to track which file is currently being displayed and read by the
     /// application.</remarks>
     private string _currentFilePath;
+
+    /// <summary>
+    /// Gets the normalized maximum scroll value for WPF ScrollBar binding.
+    /// </summary>
+    public static double NormalizedMaxScroll => NormalizedMaximum;
 
     /// <summary>
     /// Gets or sets the path to the currently opened file.
@@ -112,10 +125,43 @@ public class MainViewModel : INotifyPropertyChanged
             {
                 _scrollPosition = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(NormalizedScrollPosition));
                 _ = LoadLinesAsync();
             }
         }
     }
+
+    /// <summary>
+    /// Gets or sets the normalized scroll position (0 to 10,000,000) for WPF ScrollBar binding.
+    /// </summary>
+    /// <remarks>This property maps the raw byte offset to a normalized range to avoid double precision
+    /// loss when working with very large files. The normalization ensures smooth scrolling
+    /// regardless of file size.</remarks>
+    public double NormalizedScrollPosition
+    {
+        get => (_maxScroll <= 0) ? 0 : (double)_scrollPosition / _maxScroll * NormalizedMaximum;
+        set
+        {
+            long newPosition = (_maxScroll <= 0) ? 0 : (long)(value / NormalizedMaximum * _maxScroll);
+            if (_scrollPosition != newPosition)
+            {
+                _scrollPosition = newPosition;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(NormalizedScrollPosition));
+                _ = LoadLinesAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the scroll step size for PageUp/PageDown operations, scaled based on file size.
+    /// </summary>
+    public long PageScrollStep => _maxScroll switch
+    {
+        < 10000000 => 500,
+        < 1000000000 => 10000,
+        _ => _maxScroll / 10000
+    };
 
     /// <summary>
     /// Gets or sets the maximum scroll position allowed for the control.
@@ -174,7 +220,7 @@ public class MainViewModel : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Error during opening the file: {ex.Message}");
+            MessageBox.Show($"Error opening file: {ex.Message}", "Open File", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -227,67 +273,60 @@ public class MainViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Asynchronously searches for the specified text pattern in the currently opened file.
+    /// Searches asynchronously for a specified text pattern in the currently opened file, allowing for forward or
+    /// backward search direction.
     /// </summary>
-    /// <remarks>If no file is currently opened, the method displays a message to the user and does not
-    /// perform a search. If the pattern is found, the scroll position is updated to the location of the found pattern;
-    /// otherwise, a message indicates that the pattern was not found.</remarks>
-    /// <param name="pattern">The string pattern to search for within the file. This parameter cannot be null or empty.</param>
+    /// <remarks>If no file is opened, an error message is displayed and the search is not performed. The
+    /// search operation can be canceled, and the last found index is updated based on the search results.</remarks>
+    /// <param name="pattern">The text pattern to search for within the file. This parameter cannot be null or empty.</param>
+    /// <param name="searchForward">A value indicating the search direction. Specify <see langword="true"/> to search forward from the last found
+    /// index; otherwise, search backward.</param>
     /// <returns>A task that represents the asynchronous search operation.</returns>
     public async Task SearchAsync(string pattern, bool searchForward = true)
     {
         if (_filesReader == null)
         {
-            MessageBox.Show("No file is opened.");
+            MessageBox.Show("No file is open.", "Search", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+
+        _searchCancellationTokenSource?.Cancel();
+        _searchCancellationTokenSource?.Dispose();
+        _searchCancellationTokenSource = new CancellationTokenSource();
+        var token = _searchCancellationTokenSource.Token;
 
         long startPosition = 0;
 
         if (searchForward)
         {
-            if (pattern == _lastSearchPattern && _lastFoundIndex != -1)
-            {
-                startPosition = _lastFoundIndex + 1;
-            }
-            else
-            {
-                startPosition = 0;
-            }
+            startPosition = (pattern == _lastSearchPattern && _lastFoundIndex != -1) ? _lastFoundIndex + 1 : 0;
         }
         else
         {
-            if (pattern == _lastSearchPattern && _lastFoundIndex != -1)
-            {
-                startPosition = _lastFoundIndex;
-            }
-            else
-            {
-                startPosition = _filesReader.FileLength;
-            }
+            startPosition = (pattern == _lastSearchPattern && _lastFoundIndex != -1) ? _lastFoundIndex : _filesReader.FileLength;
         }
 
         _lastSearchPattern = pattern;
 
-        long foundIndex;
-        if (searchForward)
+        try
         {
-            foundIndex = await _filesReader.SearchPatternAsync(pattern, startPosition);
-        }
-        else
-        {
-            foundIndex = await _filesReader.SearchPatternBackwardsAsync(pattern, startPosition);
-        }
+            long foundIndex = searchForward
+                ? await _filesReader.SearchPatternAsync(pattern, startPosition, token)
+                : await _filesReader.SearchPatternBackwardsAsync(pattern, startPosition, token);
 
-        if (foundIndex != -1)
-        {
-            ScrollPosition = foundIndex;
-            _lastFoundIndex = foundIndex;
+            if (foundIndex != -1)
+            {
+                ScrollPosition = foundIndex;
+                _lastFoundIndex = foundIndex;
+            }
+            else
+            {
+                MessageBox.Show($"Text '{pattern}' not found.", "Search", MessageBoxButton.OK, MessageBoxImage.Information);
+                _lastFoundIndex = -1;
+            }
         }
-        else
+        catch (OperationCanceledException)
         {
-            MessageBox.Show($"Text '{pattern}' not found.");
-            _lastFoundIndex = -1;
         }
     }
 

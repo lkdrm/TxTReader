@@ -29,6 +29,28 @@ public class FilesReader : IAsyncDisposable
     private const int NullCharacter = 0x00;
 
     /// <summary>
+    /// Represents the default size, in bytes, of the buffer used for data operations.
+    /// </summary>
+    private const int BufferSize = 4096;
+
+    /// <summary>
+    /// Represents the average size, in bytes, of a line used for internal memory allocation estimates.
+    /// </summary>
+    /// <remarks>This constant is intended for internal calculations related to line processing and should not
+    /// be modified.</remarks>
+    private const long AverageLineSize = 65536L;
+
+    /// <summary>
+    /// The margin size, in bytes, to be used for chunk buffer allocations.
+    /// </summary>
+    private const int ChunkBufferMargin = 8192;
+
+    /// <summary>
+    /// Gets the default chunk size used for data processing, set to 1 MB.
+    /// </summary>
+    private const int DefaultChunkSize = 1024 * 1024;
+
+    /// <summary>
     /// The total length of the file in bytes.
     /// </summary>
     private readonly long _fileLength;
@@ -61,20 +83,19 @@ public class FilesReader : IAsyncDisposable
         var fileInfo = new FileInfo(filePath);
         _fileLength = fileInfo.Length;
 
-        // Create a memory-mapped file for efficient read-only access to the entire file without loading it into memory
         _memoryMappedFile = MemoryMappedFile.CreateFromFile(filePath, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
     }
 
     /// <summary>
     /// Asynchronously reads a specified number of lines from a memory-mapped file, starting at the given byte position.
     /// </summary>
-    /// <remarks>This method is intended for efficient, asynchronous reading of lines from large files without
-    /// blocking the calling thread.</remarks>
-    /// <param name="positionBytes">The byte position within the file at which to begin reading. Must be a non-negative value within the bounds of
-    /// the file.</param>
-    /// <param name="countLines">The maximum number of lines to read from the file. Must be a positive integer.</param>
-    /// <returns>A list of strings containing the lines read from the file. The list may be empty if no lines are read.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown if the method is called after the FilesReader object has been disposed.</exception>
+    /// <remarks>This method may throw an ObjectDisposedException if the underlying file has been disposed. It
+    /// is important to ensure that the specified position and count are valid to avoid unexpected behavior.</remarks>
+    /// <param name="positionBytes">The byte position in the file from which to begin reading lines. Must be non-negative and within the bounds of
+    /// the file length.</param>
+    /// <param name="countLines">The number of lines to read from the file. Must be a positive integer.</param>
+    /// <returns>A list of strings containing the lines read from the file. The list will be empty if no lines are read or if the
+    /// specified position is beyond the end of the file.</returns>
     public async Task<List<string>> ReadAllLinesAsync(long positionBytes, int countLines)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -83,24 +104,32 @@ public class FilesReader : IAsyncDisposable
         {
             List<string> resultLines = [];
 
-            // Create a view accessor for the entire file with read-only access (0, 0 parameters map the full file length)
-            using (var accessor = _memoryMappedFile!.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read))
+            long chunkStart = Math.Max(0, positionBytes - BufferSize);
+            long estimatedChunkSize = Math.Max((countLines * AverageLineSize) + ChunkBufferMargin, DefaultChunkSize);
+            long chunkSize = Math.Min(estimatedChunkSize, _fileLength - chunkStart);
+
+            if (chunkSize <= 0)
             {
-                // Find the start of the line to ensure we read complete lines from a safe boundary position
-                long safePosition = FindStartLine(accessor, positionBytes);
-                long currentPosition = safePosition;
+                return resultLines;
+            }
+
+            using (var accessor = _memoryMappedFile!.CreateViewAccessor(chunkStart, chunkSize, MemoryMappedFileAccess.Read))
+            {
+                long offsetInChunk = positionBytes - chunkStart;
+                long safeOffset = FindStartLineInChunk(accessor, offsetInChunk, chunkSize);
+                long currentOffset = safeOffset;
 
                 for (int i = 0; i < countLines; i++)
                 {
-                    if (currentPosition >= _fileLength)
+                    long absolutePosition = chunkStart + currentOffset;
+                    if (absolutePosition >= _fileLength || currentOffset >= chunkSize)
                     {
                         break;
                     }
 
-                    // Read a line from the current position and get the next position to continue reading
-                    var (line, nextPosition) = ReadLineFromAccessor(accessor, currentPosition);
+                    var (line, nextOffset) = ReadLineFromChunk(accessor, currentOffset, chunkSize);
                     resultLines.Add(line);
-                    currentPosition = nextPosition;
+                    currentOffset = nextOffset;
                 }
             }
             return resultLines;
@@ -108,103 +137,152 @@ public class FilesReader : IAsyncDisposable
     }
 
     /// <summary>
-    /// Finds the byte position marking the start of the line in a memory-mapped file, scanning backwards from the
-    /// specified position.
+    /// Finds the position of the first character of a line within a specified chunk of a memory-mapped file, scanning
+    /// backwards from a given offset.
     /// </summary>
-    /// <remarks>This method scans backwards from the specified position to locate the start of the line,
-    /// stopping at the first byte that is not a continuation byte. It then searches for the last newline character
-    /// (0x0A) to determine the start of the line.</remarks>
-    /// <param name="accessor">The memory-mapped view accessor used to read bytes from the file.</param>
-    /// <param name="positionBytes">The byte position from which to begin searching for the start of the line. Must be greater than zero.</param>
-    /// <returns>The byte position of the start of the line, or 0 if no line start is found.</returns>
-    private long FindStartLine(MemoryMappedViewAccessor accessor, long positionBytes)
+    /// <remarks>This method scans backwards from the specified offset to locate the first newline character.
+    /// If the offset is less than or equal to zero, the method returns 0 immediately. The returned position can be used
+    /// to identify the beginning of a line for further processing.</remarks>
+    /// <param name="accessor">The memory-mapped view accessor used to read bytes from the chunk.</param>
+    /// <param name="offsetInChunk">The offset within the chunk from which to begin searching for the start of a line. Must be greater than zero.</param>
+    /// <param name="chunkSize">The total size, in bytes, of the chunk being accessed. Must be greater than zero.</param>
+    /// <returns>The position of the start of the line within the chunk, or 0 if no newline character is found before the offset.</returns>
+    private static long FindStartLineInChunk(MemoryMappedViewAccessor accessor, long offsetInChunk, long chunkSize)
     {
-        if (positionBytes <= 0)
+        if (offsetInChunk <= 0)
         {
             return 0;
         }
 
-        long positions = positionBytes;
+        long position = Math.Min(offsetInChunk, chunkSize - 1);
 
-        // Scan backwards from the safe position to find the last newline character (0x0A)
-        // Return the position immediately after the newline to mark the start of the current line
-        while (positions >= 0)
+        while (position >= 0)
         {
-            byte b = accessor.ReadByte(positions);
+            byte b = accessor.ReadByte(position);
             if (b == NewLineCharacter)
             {
-                return positions + 1;
+                return position + 1;
             }
-            positions--;
+            position--;
         }
         return 0;
     }
 
     /// <summary>
-    /// Asynchronously searches for the first occurrence of a specified byte pattern, encoded as a UTF-8 string, within
-    /// the file, starting from a given offset.
+    /// Reads a line of text from a specified position within a memory-mapped file chunk and returns the line along with
+    /// the offset position immediately after the line.
     /// </summary>
-    /// <remarks>The method reads the file in 1 MB chunks and searches for the pattern in each chunk. If the
-    /// pattern spans across chunk boundaries, the method ensures it is still detected. If the object has been disposed,
-    /// an ObjectDisposedException is thrown.</remarks>
-    /// <param name="pattern">The string pattern to search for. The pattern is encoded using UTF-8 before searching.</param>
-    /// <param name="startOffSet">The zero-based byte offset in the file at which to begin the search. Must be non-negative and less than the
-    /// length of the file.</param>
-    /// <returns>A zero-based index representing the position of the first occurrence of the pattern within the file; returns -1
-    /// if the pattern is not found.</returns>
-    public async Task<long> SearchPatternAsync(string pattern, long startOffSet = 0)
+    /// <remarks>The method stops reading at a new line character or after a maximum of 10,000 bytes to
+    /// prevent excessive memory usage. Null characters are ignored during reading. If the line ends with a carriage
+    /// return character, it is removed from the result.</remarks>
+    /// <param name="accessor">The memory-mapped view accessor used to read bytes from the file chunk.</param>
+    /// <param name="startOffset">The zero-based offset within the chunk at which to begin reading.</param>
+    /// <param name="chunkSize">The total size, in bytes, of the chunk to be read. Reading will not exceed this limit.</param>
+    /// <returns>A tuple containing the read line as a UTF-8 string and the next offset position after the line.</returns>
+    private static (string line, long nextOffset) ReadLineFromChunk(MemoryMappedViewAccessor accessor, long startOffset, long chunkSize)
+    {
+        List<byte> bytes = [];
+        long position = startOffset;
+
+        while (position < chunkSize)
+        {
+            byte b = accessor.ReadByte(position);
+            position++;
+
+            if (b == NewLineCharacter)
+            {
+                break;
+            }
+
+            if (b == NullCharacter)
+            {
+                continue;
+            }
+
+            bytes.Add(b);
+
+            if (bytes.Count > 10000)
+            {
+                break;
+            }
+        }
+
+        if (bytes.Count > 0 && bytes[^1] == '\r')
+        {
+            bytes.RemoveAt(bytes.Count - 1);
+        }
+
+        return (Encoding.UTF8.GetString(bytes.ToArray()), position);
+    }
+
+    /// <summary>
+    /// Searches asynchronously for the specified UTF-8 encoded byte pattern within the file, starting at the given
+    /// offset.
+    /// </summary>
+    /// <remarks>The method reads the file in chunks to optimize performance. If the operation is canceled, an
+    /// OperationCanceledException is thrown.</remarks>
+    /// <param name="pattern">The string pattern to search for. The pattern is encoded as UTF-8 before searching.</param>
+    /// <param name="startOffSet">The zero-based position in the file from which to begin the search. Must be non-negative and less than the file
+    /// length.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the search operation.</param>
+    /// <returns>The zero-based index of the first occurrence of the pattern in the file, or -1 if the pattern is not found.</returns>
+    public async Task<long> SearchPatternAsync(string pattern, long startOffSet = 0, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         byte[] patternBytes = Encoding.UTF8.GetBytes(pattern);
         int overlap = patternBytes.Length - 1;
-        int bufferSize = 1024 * 1024;
-        long currentPostition = startOffSet;
+        int bufferSize = 4 * DefaultChunkSize;
+        long currentPosition = startOffSet;
 
-        while (currentPostition < _fileLength)
+        while (currentPosition < _fileLength)
         {
-            byte[] buffer = await ReadBytesAsync(currentPostition, bufferSize);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            byte[] buffer = await ReadBytesAsync(currentPosition, bufferSize);
             ReadOnlySpan<byte> searchBytes = buffer.AsSpan();
 
             int localIndex = searchBytes.IndexOf(patternBytes);
 
             if (localIndex != -1)
             {
-                return currentPostition + localIndex;
+                return currentPosition + localIndex;
             }
 
             if (buffer.Length < bufferSize)
             {
                 break;
             }
-            currentPostition += (buffer.Length - overlap);
+            currentPosition += (buffer.Length - overlap);
         }
         return -1;
     }
 
     /// <summary>
-    /// Asynchronously searches for the last occurrence of a specified string pattern in the file, scanning backwards
-    /// from a given offset.
+    /// Searches for the specified string pattern in the file, starting from the given offset and moving backwards, and
+    /// returns the position of the last occurrence.
     /// </summary>
-    /// <remarks>The method reads the file in 1 MB chunks and searches each chunk for the specified pattern,
-    /// moving backwards through the file until the pattern is found or the beginning of the file is reached. The search
-    /// is performed using UTF-8 encoding for the pattern.</remarks>
-    /// <param name="pattern">The string pattern to search for within the file. This value cannot be null or empty.</param>
-    /// <param name="startOffSet">The position in the file, in bytes, from which to start the search. Specify -1 to begin searching from the end
-    /// of the file.</param>
-    /// <returns>A zero-based index representing the position of the last occurrence of the pattern within the file; returns -1
-    /// if the pattern is not found.</returns>
-    public async Task<long> SearchPatternBackwardsAsync(string pattern, long startOffSet)
+    /// <remarks>The method reads the file in chunks and searches backwards for the specified pattern. Throws
+    /// an ObjectDisposedException if the object has been disposed. The search is performed using UTF-8 encoding for the
+    /// pattern.</remarks>
+    /// <param name="pattern">The string pattern to search for. This parameter cannot be null or empty.</param>
+    /// <param name="startOffSet">The zero-based position in the file from which to begin the search. Specify -1 to start from the end of the
+    /// file.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the asynchronous operation.</param>
+    /// <returns>The zero-based position of the last occurrence of the pattern in the file, or -1 if the pattern is not found.</returns>
+    public async Task<long> SearchPatternBackwardsAsync(string pattern, long startOffSet, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         byte[] patternBytes = Encoding.UTF8.GetBytes(pattern);
         int overlap = patternBytes.Length - 1;
-        int bufferSize = 1024 * 1024;
+        int bufferSize = 4 * DefaultChunkSize;
         long currentEndPosition = (startOffSet == -1) ? _fileLength : startOffSet;
 
         while (currentEndPosition > 0)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             long readStartPosition = Math.Max(0, currentEndPosition - bufferSize);
             int bytesToRead = (int)(currentEndPosition - readStartPosition);
 
@@ -254,50 +332,6 @@ public class FilesReader : IAsyncDisposable
             }
             return buffer;
         });
-
-    /// <summary>
-    /// Reads a line of text from a memory-mapped file, starting at the specified position.
-    /// </summary>
-    /// <remarks>Reading stops when a newline character (NewLineCharacter) is encountered, a null byte (NullCharacter) is skipped,
-    /// or the line exceeds 10,000 bytes. The method is intended for sequential reading of lines from large files using
-    /// memory mapping.</remarks>
-    /// <param name="accessor">The memory-mapped view accessor used to read bytes from the underlying file.</param>
-    /// <param name="startPosition">The position within the memory-mapped view from which to begin reading the line.</param>
-    /// <returns>A tuple containing the read line as a string and the position of the next byte to be read after the line.</returns>
-    private (string line, long nextPosition) ReadLineFromAccessor(MemoryMappedViewAccessor accessor, long startPosition)
-    {
-        List<byte> bytes = [];
-
-        long positions = startPosition;
-
-        while (positions < _fileLength)
-        {
-            byte b = accessor.ReadByte(positions);
-            positions++;
-            if (b == NewLineCharacter)
-            {
-                break;
-            }
-
-            if (b == NullCharacter)
-            {
-                continue;
-            }
-
-            bytes.Add(b);
-
-            if (bytes.Count > 10000)
-            {
-                break;
-            }
-        }
-
-        if (bytes.Count > 0 && bytes[^1] == '\r')
-        {
-            bytes.RemoveAt(bytes.Count - 1);
-        }
-        return (Encoding.UTF8.GetString(bytes.ToArray()), positions);
-    }
 
     /// <summary>
     /// Asynchronously releases the unmanaged resources used by the object and optionally releases the managed

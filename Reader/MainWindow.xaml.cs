@@ -28,6 +28,12 @@ public partial class MainWindow : Window
     /// </summary>
     private string _readFilePath;
 
+    /// <summary>
+    /// Defines the buffer size (1 MB) used for file I/O operations when reading and writing large files.
+    /// A larger buffer size reduces the number of I/O operations and improves performance for large file processing.
+    /// </summary>
+    private const int BufferSize = 1048576;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -58,7 +64,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var viewModel = this.DataContext as MainViewModel;
+            var viewModel = DataContext as MainViewModel;
             if (viewModel != null)
             {
                 bool isShiftPressed = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
@@ -68,13 +74,13 @@ public partial class MainWindow : Window
         }
         else if (e.Key == Key.PageUp || e.Key == Key.PageDown)
         {
-            var viewModel = this.DataContext as MainViewModel;
+            var viewModel = DataContext as MainViewModel;
             if (viewModel == null)
             {
                 return;
             }
 
-            long offset = 50;
+            long offset = viewModel.PageScrollStep;
 
             if (e.Key is Key.PageUp)
             {
@@ -88,7 +94,7 @@ public partial class MainWindow : Window
         }
         else if (e.Key == Key.End || e.Key == Key.Home)
         {
-            var viewModel = this.DataContext as MainViewModel;
+            var viewModel = DataContext as MainViewModel;
             if (viewModel == null)
             {
                 return;
@@ -143,7 +149,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var viewModel = this.DataContext as MainViewModel;
+        var viewModel = DataContext as MainViewModel;
 
         if (viewModel != null)
         {
@@ -165,7 +171,7 @@ public partial class MainWindow : Window
         string url = UrlBox.Text;
         if (string.IsNullOrWhiteSpace(url))
         {
-            MessageBox.Show("Enter please valid link");
+            MessageBox.Show("Please enter a valid link", "URL", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -185,7 +191,7 @@ public partial class MainWindow : Window
                 using var streamToWrite = File.Open(tempFilePath, FileMode.Create);
                 await streamToReadFrom.CopyToAsync(streamToWrite);
             }
-            var viewModel = this.DataContext as MainViewModel;
+            var viewModel = DataContext as MainViewModel;
             if (viewModel != null)
             {
                 await viewModel.OpenFilesAsync(tempFilePath);
@@ -196,7 +202,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Error during the downloading: {ex.Message}");
+            MessageBox.Show($"Error during download: {ex.Message}", "Download File", MessageBoxButton.OK, MessageBoxImage.Error);
             (sender as Button).Content = "Download";
             (sender as Button).IsEnabled = true;
         }
@@ -254,7 +260,7 @@ public partial class MainWindow : Window
                 }
             });
 
-            var viewModel = this.DataContext as MainViewModel;
+            var viewModel = DataContext as MainViewModel;
             if (viewModel != null)
             {
                 await viewModel.OpenFilesAsync(tempFilePath);
@@ -262,7 +268,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Error during text generation: {ex}");
+            MessageBox.Show($"Error during text generation: {ex.Message}", "Text Generation", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -282,11 +288,11 @@ public partial class MainWindow : Window
     /// <param name="e">The event data associated with the click event.</param>
     private async void Save_click(object sender, RoutedEventArgs e)
     {
-        var viewModel = this.DataContext as MainViewModel;
+        var viewModel = DataContext as MainViewModel;
 
         if (viewModel == null || string.IsNullOrEmpty(viewModel.CurrentFilePath))
         {
-            MessageBox.Show("Mistake was happens during the saving");
+            MessageBox.Show("An error occurred while saving", "File Saving", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
 
@@ -303,27 +309,28 @@ public partial class MainWindow : Window
             try
             {
                 File.Copy(viewModel.CurrentFilePath, saveDialog.FileName, true);
-                MessageBox.Show("File has been saved");
+                MessageBox.Show("File has been saved", "File Saving", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Can`t save a file: {ex.Message}");
+                MessageBox.Show($"Cannot save file: {ex.Message}", "File Saving", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
 
     /// <summary>
-    /// Handles the Checked event for the filter checkbox, filtering lines in the current file based on the search text
-    /// and displaying the filtered results.
+    /// Handles the Checked event for the filter checkbox, asynchronously filtering lines from the current file based on
+    /// the search text provided in the search box.
     /// </summary>
-    /// <remarks>If the current file path is not set or the search text is empty, no filtering is performed.
-    /// The method creates a temporary file containing only the lines that match the search text and opens it for
-    /// viewing. This operation is performed asynchronously to avoid blocking the UI thread.</remarks>
-    /// <param name="sender">The source of the event, typically the filter checkbox that was checked.</param>
+    /// <remarks>This method reads the specified file and filters lines containing the search text, updating
+    /// the window title to reflect progress. If no matching lines are found, a message box is displayed and the filter
+    /// checkbox is reset. The method disables the filter checkbox during processing to prevent repeated
+    /// actions.</remarks>
+    /// <param name="sender">The source of the event, typically the filter checkbox control that was checked.</param>
     /// <param name="e">The event data associated with the Checked event.</param>
     private async void FilterCheckerBox_Checked(object sender, RoutedEventArgs e)
     {
-        var viewModel = (MainViewModel)this.DataContext;
+        var viewModel = DataContext as MainViewModel;
 
         if (viewModel == null || string.IsNullOrEmpty(viewModel.CurrentFilePath))
         {
@@ -339,24 +346,72 @@ public partial class MainWindow : Window
             return;
         }
 
+        FilterCheckBox.IsEnabled = false;
+        string originalTitle = this.Title;
+
         string tempFilePath = Path.GetTempFileName();
 
-        await Task.Run(async () =>
+        try
         {
-            using var streamReader = new StreamReader(_readFilePath);
-            using var writer = new StreamWriter(tempFilePath);
+            var fileInfo = new FileInfo(_readFilePath);
+            long fileSize = fileInfo.Length;
+
+            long matchedLines = 0;
+
+            await Task.Run(async () =>
             {
+
+                using var streamReader = new StreamReader(_readFilePath, Encoding.UTF8, true, BufferSize);
+                using var writer = new StreamWriter(tempFilePath, false, Encoding.UTF8, BufferSize);
+
                 string line;
+                long bytesProcessed = 0;
+                int lineCount = 0;
+
                 while ((line = await streamReader.ReadLineAsync()) != null)
                 {
                     if (line.Contains(searchText, StringComparison.OrdinalIgnoreCase))
                     {
                         await writer.WriteLineAsync(line);
+                        matchedLines++;
+                    }
+
+                    lineCount++;
+                    if (lineCount % 50000 == 0)
+                    {
+                        bytesProcessed = streamReader.BaseStream.Position;
+                        double progress = (double)bytesProcessed / fileSize * 100;
+
+                        Dispatcher.Invoke(() =>
+                        {
+                            this.Title = $"Filtering... {progress:F1}%";
+                        });
                     }
                 }
+                await writer.FlushAsync();
+            });
+
+            this.Title = originalTitle;
+
+            if (matchedLines == 0)
+            {
+                MessageBox.Show($"No lines found matching '{searchText}'.", "Filter Results", MessageBoxButton.OK, MessageBoxImage.Information);
+                FilterCheckBox.IsChecked = false;
+                return;
             }
-        });
-        await viewModel.OpenFilesAsync(tempFilePath);
+
+            await viewModel.OpenFilesAsync(tempFilePath);
+        }
+        catch (Exception ex)
+        {
+            this.Title = originalTitle;
+            MessageBox.Show($"Error during filtering: {ex.Message}", "Filter Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            FilterCheckBox.IsChecked = false;
+        }
+        finally
+        {
+            FilterCheckBox.IsEnabled = true;
+        }
     }
 
     /// <summary>
@@ -370,9 +425,9 @@ public partial class MainWindow : Window
     /// <param name="e">The event data associated with the Unchecked event.</param>
     private async void FilterCheckerBox_Unchecked(object sender, RoutedEventArgs e)
     {
-        var viewModel = (MainViewModel)this.DataContext;
+        var viewModel = DataContext as MainViewModel;
 
-        if(viewModel != null && !string.IsNullOrEmpty(_readFilePath))
+        if (viewModel != null && !string.IsNullOrEmpty(_readFilePath))
         {
             viewModel.OpenFilesAsync(_readFilePath);
         }
@@ -391,17 +446,14 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainViewModel viewModel)
         {
-            // Calculate scroll amount (negative delta means scroll down)
-            // Multiply by 3 for more responsive scrolling
-            long scrollAmount = -e.Delta * 3;
+            long scrollMultiplier = Math.Max(1, viewModel.MaxScroll / 100000);
+            long scrollAmount = -e.Delta * scrollMultiplier;
 
-            // Update scroll position, ensuring it stays within bounds
             long newPosition = viewModel.ScrollPosition + scrollAmount;
             newPosition = Math.Max(0, Math.Min(newPosition, viewModel.MaxScroll));
 
             viewModel.ScrollPosition = newPosition;
 
-            // Mark event as handled to prevent default scrolling behavior
             e.Handled = true;
         }
     }
@@ -417,19 +469,14 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Enter)
         {
-            // Cancel the routed event, preventing further processing
             e.Handled = true;
 
-            // Retrieve the search text from the SearchBox TextBox
             string searchText = SearchBox.Text;
 
-            // If search text is not empty, execute the search command
             if (!string.IsNullOrWhiteSpace(searchText))
             {
-                // Get the view model from the DataContext
                 var viewModel = DataContext as MainViewModel;
 
-                // If the view model is available, execute the search asynchronously
                 if (viewModel != null)
                 {
                     await viewModel.SearchAsync(searchText);
