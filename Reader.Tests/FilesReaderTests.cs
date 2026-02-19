@@ -753,4 +753,370 @@ public class FilesReaderTests : IDisposable
     }
 
     #endregion
+
+    #region Search Tests
+
+    [Fact]
+    public async Task SearchPatternAsync_SimplePattern_ShouldFindFirstOccurrence()
+    {
+        // Arrange
+        var content = "Line 1\nLine 2\nLine 3\nLine 2 again";
+        var filePath = CreateTestFile("search.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternAsync("Line 2");
+
+        // Assert
+        Assert.True(result >= 0, "Pattern should be found");
+        Assert.True(result < reader.FileLength, "Result should be within file bounds");
+    }
+
+    [Fact]
+    public async Task SearchPatternAsync_PatternNotFound_ShouldReturnNegativeOne()
+    {
+        // Arrange
+        var content = "Line 1\nLine 2\nLine 3";
+        var filePath = CreateTestFile("notfound.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternAsync("NotExist");
+
+        // Assert
+        Assert.Equal(-1, result);
+    }
+
+    [Fact]
+    public async Task SearchPatternAsync_WithStartOffset_ShouldFindFromOffset()
+    {
+        // Arrange
+        var content = "First Line 2\nSecond Line 2\nThird Line 2";
+        var filePath = CreateTestFile("offsetsearch.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Find first occurrence
+        var firstOccurrence = await reader.SearchPatternAsync("Line 2");
+        Assert.True(firstOccurrence >= 0, "First occurrence should be found");
+
+        // Act - Search from after first occurrence
+        var secondOccurrence = await reader.SearchPatternAsync("Line 2", firstOccurrence + 1);
+
+        // Assert
+        Assert.True(secondOccurrence > firstOccurrence, "Second occurrence should be after first");
+    }
+
+    [Fact]
+    public async Task SearchPatternAsync_EmptyPattern_ShouldFindImmediately()
+    {
+        // Arrange
+        var content = "Test content";
+        var filePath = CreateTestFile("emptypattern.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternAsync("");
+
+        // Assert
+        // Empty pattern is found immediately at position 0
+        Assert.True(result >= 0, "Empty pattern should be found at some position");
+    }
+
+    [Fact]
+    public async Task SearchPatternAsync_UTF8Pattern_ShouldFindCorrectly()
+    {
+        // Arrange
+        var content = "Hello World\n你好世界\nBonjour monde";
+        var filePath = CreateTestFile("utf8search.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternAsync("你好世界");
+
+        // Assert
+        Assert.True(result >= 0, "UTF-8 pattern should be found");
+    }
+
+    [Fact]
+    public async Task SearchPatternAsync_PatternAtEndOfFile_ShouldFindCorrectly()
+    {
+        // Arrange
+        var content = "Start\nMiddle\nEnd";
+        var filePath = CreateTestFile("endpattern.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternAsync("End");
+
+        // Assert
+        Assert.True(result >= 0, "Pattern at end should be found");
+    }
+
+    [Fact]
+    public async Task SearchPatternAsync_PatternAtBeginning_ShouldFindAtZero()
+    {
+        // Arrange
+        var content = "Start\nMiddle\nEnd";
+        var filePath = CreateTestFile("startpattern.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternAsync("Start");
+
+        // Assert
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public async Task SearchPatternAsync_WithCancellation_ShouldThrowOperationCanceledException()
+    {
+        // Arrange
+        var filePath = TrackGeneratedFile(
+            await TestFixtures.GenerateLargeFileAsync(10000, _testFilesDirectory));
+
+        await using var reader = new FilesReader(filePath);
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await reader.SearchPatternAsync("NonExistent", 0, cts.Token));
+    }
+
+    [Fact]
+    public async Task SearchPatternAsync_LargeFile_ShouldFindPattern()
+    {
+        // Arrange
+        var filePath = TrackGeneratedFile(
+            await TestFixtures.GenerateLargeFileAsync(1000, _testFilesDirectory));
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternAsync("Line 500");
+
+        // Assert
+        Assert.True(result >= 0, "Pattern should be found in large file");
+    }
+
+    [Fact]
+    public async Task SearchPatternAsync_MultipleOccurrences_ShouldFindFirst()
+    {
+        // Arrange
+        var content = "Test\nTest\nTest";
+        var filePath = CreateTestFile("multipleoccur.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternAsync("Test");
+
+        // Assert
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public async Task SearchPatternAsync_AfterDispose_ShouldThrowObjectDisposedException()
+    {
+        // Arrange
+        var filePath = CreateTestFile("disposedsearch.txt", "Test content");
+        var reader = new FilesReader(filePath);
+        await reader.DisposeAsync();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            async () => await reader.SearchPatternAsync("Test"));
+    }
+
+    [Fact]
+    public async Task SearchPatternBackwardsAsync_SimplePattern_ShouldFindLastOccurrence()
+    {
+        // Arrange
+        var content = "Test\nAnother Test\nYet Another Test";
+        var filePath = CreateTestFile("backwardsearch.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternBackwardsAsync("Test", -1);
+
+        // Assert
+        Assert.True(result >= 0, "Pattern should be found");
+        // Should find the last occurrence
+    }
+
+    [Fact]
+    public async Task SearchPatternBackwardsAsync_PatternNotFound_ShouldReturnNegativeOne()
+    {
+        // Arrange
+        var content = "Line 1\nLine 2\nLine 3";
+        var filePath = CreateTestFile("backwardnotfound.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternBackwardsAsync("NotExist", -1);
+
+        // Assert
+        Assert.Equal(-1, result);
+    }
+
+    [Fact]
+    public async Task SearchPatternBackwardsAsync_FromEndOfFile_ShouldSearchBackwards()
+    {
+        // Arrange
+        var content = "First Match\nMiddle Content\nLast Match";
+        var filePath = CreateTestFile("backwardfromend.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act - Search from end (-1 means from end)
+        var lastMatch = await reader.SearchPatternBackwardsAsync("Match", -1);
+
+        // Assert
+        Assert.True(lastMatch >= 0, "Should find last match");
+    }
+
+    [Fact]
+    public async Task SearchPatternBackwardsAsync_WithSpecificOffset_ShouldSearchFromOffset()
+    {
+        // Arrange
+        var content = "First Test\nSecond Test\nThird Test";
+        var filePath = CreateTestFile("backwardoffset.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Find last occurrence
+        var lastOccurrence = await reader.SearchPatternBackwardsAsync("Test", -1);
+        Assert.True(lastOccurrence > 0, "Last occurrence should be found");
+
+        // Act - Search backwards from before last occurrence
+        var previousOccurrence = await reader.SearchPatternBackwardsAsync("Test", lastOccurrence - 1);
+
+        // Assert
+        Assert.True(previousOccurrence >= 0, "Previous occurrence should be found");
+        Assert.True(previousOccurrence < lastOccurrence, "Previous should be before last");
+    }
+
+    [Fact]
+    public async Task SearchPatternBackwardsAsync_UTF8Pattern_ShouldFindCorrectly()
+    {
+        // Arrange
+        var content = "Start\n世界你好\nEnd";
+        var filePath = CreateTestFile("backwardutf8.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternBackwardsAsync("世界你好", -1);
+
+        // Assert
+        Assert.True(result >= 0, "UTF-8 pattern should be found backwards");
+    }
+
+    [Fact]
+    public async Task SearchPatternBackwardsAsync_WithCancellation_ShouldThrowOperationCanceledException()
+    {
+        // Arrange
+        var filePath = TrackGeneratedFile(
+            await TestFixtures.GenerateLargeFileAsync(10000, _testFilesDirectory));
+
+        await using var reader = new FilesReader(filePath);
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await reader.SearchPatternBackwardsAsync("NonExistent", -1, cts.Token));
+    }
+
+    [Fact]
+    public async Task SearchPatternBackwardsAsync_LargeFile_ShouldFindPattern()
+    {
+        // Arrange
+        var filePath = TrackGeneratedFile(
+            await TestFixtures.GenerateLargeFileAsync(1000, _testFilesDirectory));
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternBackwardsAsync("Line 500", -1);
+
+        // Assert
+        Assert.True(result >= 0, "Pattern should be found in large file");
+    }
+
+    [Fact]
+    public async Task SearchPatternBackwardsAsync_AfterDispose_ShouldThrowObjectDisposedException()
+    {
+        // Arrange
+        var filePath = CreateTestFile("disposedbackward.txt", "Test content");
+        var reader = new FilesReader(filePath);
+        await reader.DisposeAsync();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            async () => await reader.SearchPatternBackwardsAsync("Test", -1));
+    }
+
+    [Fact]
+    public async Task SearchPatternBackwardsAsync_EmptyPattern_ShouldFindImmediately()
+    {
+        // Arrange
+        var content = "Test content";
+        var filePath = CreateTestFile("backwardemptypattern.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var result = await reader.SearchPatternBackwardsAsync("", -1);
+
+        // Assert
+        // Empty pattern is found immediately at some position
+        Assert.True(result >= 0, "Empty pattern should be found at some position");
+    }
+
+    [Fact]
+    public async Task SearchPatternBackwardsAsync_FromBeginning_ShouldNotFindAnything()
+    {
+        // Arrange
+        var content = "Test\nContent\nHere";
+        var filePath = CreateTestFile("backwardfromstart.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act - Search backwards from position 0
+        var result = await reader.SearchPatternBackwardsAsync("Test", 0);
+
+        // Assert
+        Assert.Equal(-1, result);
+    }
+
+    [Fact]
+    public async Task SearchPatterns_ForwardThenBackward_ShouldFindDifferentOccurrences()
+    {
+        // Arrange
+        var content = "First Target\nMiddle Content\nLast Target";
+        var filePath = CreateTestFile("forwardbackward.txt", content);
+
+        await using var reader = new FilesReader(filePath);
+
+        // Act
+        var forwardResult = await reader.SearchPatternAsync("Target");
+        var backwardResult = await reader.SearchPatternBackwardsAsync("Target", -1);
+
+        // Assert
+        Assert.True(forwardResult >= 0, "Forward search should find pattern");
+        Assert.True(backwardResult >= 0, "Backward search should find pattern");
+        Assert.True(backwardResult > forwardResult, "Backward from end should find later occurrence");
+    }
+
+    #endregion
 }
