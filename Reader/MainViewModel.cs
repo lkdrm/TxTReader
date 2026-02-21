@@ -297,22 +297,24 @@ public class MainViewModel : INotifyPropertyChanged
 
         long startPosition = 0;
 
+        var trimPattern = pattern.Trim();
+
         if (searchForward)
         {
-            startPosition = (pattern == _lastSearchPattern && _lastFoundIndex != -1) ? _lastFoundIndex + 1 : 0;
+            startPosition = (trimPattern == _lastSearchPattern && _lastFoundIndex != -1) ? _lastFoundIndex + 1 : 0;
         }
         else
         {
-            startPosition = (pattern == _lastSearchPattern && _lastFoundIndex != -1) ? _lastFoundIndex : _filesReader.FileLength;
+            startPosition = (trimPattern == _lastSearchPattern && _lastFoundIndex != -1) ? _lastFoundIndex : _filesReader.FileLength;
         }
 
-        _lastSearchPattern = pattern;
+        _lastSearchPattern = trimPattern;
 
         try
         {
             long foundIndex = searchForward
-                ? await _filesReader.SearchPatternAsync(pattern, startPosition, token)
-                : await _filesReader.SearchPatternBackwardsAsync(pattern, startPosition, token);
+                ? await _filesReader.SearchPatternAsync(trimPattern, startPosition, token)
+                : await _filesReader.SearchPatternBackwardsAsync(trimPattern, startPosition, token);
 
             if (foundIndex != -1)
             {
@@ -321,7 +323,7 @@ public class MainViewModel : INotifyPropertyChanged
             }
             else
             {
-                MessageBox.Show($"Text '{pattern}' not found.", "Search", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show($"Text '{trimPattern}' not found.", "Search", MessageBoxButton.OK, MessageBoxImage.Information);
                 _lastFoundIndex = -1;
             }
         }
