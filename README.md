@@ -2,6 +2,21 @@
 
 A high-performance desktop application for reading and viewing text files, built with WPF and .NET 10.
 
+## 📌 Version
+
+**Current Version: 1.1**
+
+### Changelog
+
+- **v1.1** - Dark Mode Support
+  - Added dark and light theme support
+  - Theme toggle control in the UI
+  - Persistent theme preferences
+
+- **v1.0** - Initial Release
+  - Core text file reading functionality
+  - File filtering and search capabilities
+
 ## 🚀 Features
 
 - **Efficient File Reading**: Uses memory-mapped files for optimal performance with large text files
@@ -9,6 +24,7 @@ A high-performance desktop application for reading and viewing text files, built
 - **Fast Loading**: Asynchronous file reading with chunked processing
 - **Large File Support**: Handles large files without loading them entirely into memory
 - **Text Filtering**: Built-in filtering capabilities for quick content search
+- **Dark/Light Theme Support**: Toggle between dark and light themes (v1.1+)
 - **Cross-platform Ready**: Built on .NET 10 for modern Windows systems
 
 ## 🛠️ Technologies

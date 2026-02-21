@@ -37,4 +37,70 @@
         </Setter>
     </Style>
 
+    <Style x:Key="CheckBoxStyle" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="5,0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="20"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="checkboxBorder"
+                                Grid.Column="0"
+                                Width="20"
+                                Height="20"
+                                CornerRadius="4"
+                                Background="Transparent"
+                                BorderBrush="#0078D4"
+                                BorderThickness="2"/>
+                        <TextBlock x:Name="checkMark"
+                                   Grid.Column="0"
+                                   Text="✓"
+                                   FontSize="14"
+                                   Foreground="#0078D4"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Opacity="0"
+                                   FontWeight="Bold"/>
+                        <ContentPresenter Grid.Column="1"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="checkboxBorder" Property="BorderBrush" Value="#005A9E"/>
+                            <Setter TargetName="checkboxBorder" Property="Background" Value="#F0F8FF"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="checkboxBorder" Property="Background" Value="#E8F4FF"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="checkboxBorder" Property="Background" Value="#0078D4"/>
+                            <Setter TargetName="checkMark" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsChecked" Value="True"/>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="checkboxBorder" Property="BorderBrush" Value="#004578"/>
+                            <Setter TargetName="checkboxBorder" Property="Background" Value="#005A9E"/>
+                        </MultiTrigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="checkboxBorder" Property="BorderBrush" Value="#CCCCCC"/>
+                            <Setter Property="Foreground" Value="#999999"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>
