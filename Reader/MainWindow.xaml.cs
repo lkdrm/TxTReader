@@ -339,7 +339,7 @@ public partial class MainWindow : Window
 
         _readFilePath = viewModel.CurrentFilePath;
 
-        string searchText = SearchBox.Text;
+        string searchText = SearchBox.Text.Trim();
         if (string.IsNullOrEmpty(searchText))
         {
             FilterCheckBox.IsChecked = false;
@@ -484,4 +484,23 @@ public partial class MainWindow : Window
             }
         }
     }
+
+    /// <summary>
+    /// Handles the Checked event of the theme toggle control to apply the dark theme to the application.
+    /// </summary>
+    /// <remarks>This method updates the application's resource dictionary to use the dark theme. Ensure that
+    /// the dark theme resource file exists at the specified path and is properly configured in the project.</remarks>
+    /// <param name="sender">The source of the event, typically the toggle control that was checked.</param>
+    /// <param name="e">The event data associated with the Checked event.</param>
+    private async void ThemeToggle_Checked(object sender, RoutedEventArgs e) => Application.Current.Resources.MergedDictionaries[1].Source = new Uri("Themes/DarkTheme.xaml", UriKind.Relative);
+
+    /// <summary>
+    /// Handles the Unchecked event of the theme toggle control by switching the application's theme to the light theme.
+    /// </summary>
+    /// <remarks>This method updates the application's resource dictionary to apply the light theme when the
+    /// toggle is unchecked. Ensure that the resource dictionary at the specified index exists and is intended for theme
+    /// switching.</remarks>
+    /// <param name="sender">The source of the event, typically the theme toggle control that was unchecked.</param>
+    /// <param name="e">The event data associated with the Unchecked event.</param>
+    private async void ThemeToggle_Unchecked(object sender, RoutedEventArgs e) => Application.Current.Resources.MergedDictionaries[1].Source = new Uri("Themes/LightTheme.xaml", UriKind.Relative);
 }
