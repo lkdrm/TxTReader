@@ -15,7 +15,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="5" Background="#F0F0F0">
+        <WrapPanel Grid.Row="0" Margin="5" Background="#F0F0F0">
 
             <Button Click="OpenFile_click" Style="{StaticResource ButtonStyle}" HorizontalAlignment="Left" Width="80">
                 <StackPanel Orientation="Horizontal">
@@ -25,7 +25,7 @@
 
             <Rectangle Width="1" Fill="Gray" Margin="10,2"/>
             <TextBlock Text="Search:" VerticalAlignment="Center" Margin="5,0" FontSize="14" FontWeight="SemiBold"/>
-            <TextBox x:Name="SearchBox" KeyDown="SearchBox_KeyDown" Width="250" Height="32" VerticalAlignment="Center" Padding="8,6" 
+            <TextBox x:Name="SearchBox" KeyDown="SearchBox_KeyDown" MinWidth="90" MaxWidth="250" Height="32" VerticalAlignment="Center" Padding="8,6" 
                      FontSize="14" BorderBrush="#0078D4" BorderThickness="2" Margin="5,0"/>
 
             <CheckBox x:Name="FilterCheckBox" Content="Filtering" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" 
@@ -35,7 +35,7 @@
 
             <Rectangle Width="1" Fill="Gray" Margin="10,2"/>
             <TextBlock Text="URL:" VerticalAlignment="Center" Margin="5,0" FontWeight="SemiBold"/>
-            <TextBox x:Name="UrlBox" Width="200" Height="32" FontSize="14" VerticalAlignment="Center" Padding="2"/>
+            <TextBox x:Name="UrlBox" MinWidth="90" MaxWidth="250" Height="32" FontSize="14" VerticalAlignment="Center" Padding="2"/>
 
             <Button Content="Download" Click="DownloadUrl_Click" Style="{StaticResource ButtonStyle}" Width="80"/>
 
@@ -44,7 +44,7 @@
 
             <Rectangle Width="1" Fill="Gray" Margin="10,2"/>
             <Button Content="Save" Click="Save_click" Style="{StaticResource ButtonStyle}" Width="50"/>
-        </StackPanel>
+        </WrapPanel>
 
         <Grid Grid.Row="1" PreviewMouseWheel="ContentGrid_PreviewMouseWheel">
 
