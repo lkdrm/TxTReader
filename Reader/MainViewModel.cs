@@ -349,4 +349,16 @@ public class MainViewModel : INotifyPropertyChanged
     /// interface and ensuring that bound controls update automatically.</remarks>
     /// <param name="name">The name of the property that changed. If not specified, the caller's member name is used.</param>
     protected void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    /// <summary>
+    /// Releases the file reader resources so files can be safely deleted or moved.
+    /// </summary>
+    public async Task CloseAsync()
+    {
+        if( _filesReader != null)
+        {
+            await _filesReader.DisposeAsync();
+            _filesReader = null;
+        }
+    }
 }

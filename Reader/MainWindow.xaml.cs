@@ -29,6 +29,11 @@ public partial class MainWindow : Window
     private string _readFilePath;
 
     /// <summary>
+    /// Tracks temporary files created during the session for cleanup upon exit.
+    /// </summary>
+    private readonly List<string> _tempFiles = [];
+
+    /// <summary>
     /// Defines the buffer size (1 MB) used for file I/O operations when reading and writing large files.
     /// A larger buffer size reduces the number of I/O operations and improves performance for large file processing.
     /// </summary>
@@ -183,7 +188,7 @@ public partial class MainWindow : Window
             button.IsEnabled = false;
 
             string tempFilePath = Path.GetTempFileName();
-
+            _tempFiles.Add(tempFilePath);
             using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
             {
@@ -235,6 +240,7 @@ public partial class MainWindow : Window
         try
         {
             string tempFilePath = Path.GetTempFileName();
+            _tempFiles.Add(tempFilePath);
             int linesCount = 500000;
 
             await Task.Run(async () =>
@@ -350,6 +356,7 @@ public partial class MainWindow : Window
         string originalTitle = this.Title;
 
         string tempFilePath = Path.GetTempFileName();
+        _tempFiles.Add(tempFilePath);
 
         try
         {
@@ -503,4 +510,34 @@ public partial class MainWindow : Window
     /// <param name="sender">The source of the event, typically the theme toggle control that was unchecked.</param>
     /// <param name="e">The event data associated with the Unchecked event.</param>
     private async void ThemeToggle_Unchecked(object sender, RoutedEventArgs e) => Application.Current.Resources.MergedDictionaries[1].Source = new Uri("Themes/LightTheme.xaml", UriKind.Relative);
+
+    /// <summary>
+    /// Handles the window closing event, performing necessary cleanup operations before the window is closed.
+    /// </summary>
+    /// <remarks>This method asynchronously closes the associated view model and deletes any temporary files
+    /// created during the window's lifetime. It is important to ensure that all cleanup tasks are completed before the
+    /// window closes to prevent resource leaks.</remarks>
+    /// <param name="e">The event data that provides information about the closing event and allows cancellation of the close operation.</param>
+    protected override async void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            await viewModel.CloseAsync();
+        }
+
+        foreach (var file in _tempFiles)
+        {
+            try
+            {
+                if (File.Exists(file))
+                {
+                    File.Delete(file);
+                }
+            }
+            catch (Exception)
+            {
+            }
+        }
+        base.OnClosing(e);
+    }
 }
